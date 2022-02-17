@@ -186,13 +186,13 @@ async def talk(interaction):
 
             if msg == "yes":
                 talking = True
-                await interaction.send("You are now talking to me, to end this interaction type: goodbye famurai!")
+                await interaction.send("You are now talking to me, to end this interaction: type goodbye famurai!")
 
                 while talking:
 
                     try:
                         def check(m):
-                            return m.author == interaction.user
+                            return m.author == interaction.user and m.channel == interaction.channel
 
                         msg_raw = await client.wait_for("message", check=check, timeout=60.0)
                         msg = msg_raw.content
