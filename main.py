@@ -3260,4 +3260,4 @@ async def warn(interaction: nextcord.Interaction, member: nextcord.Member = next
             await member.send(embed=embed3)
 
 if __name__ == "__main__":
-    client.run("OTAxMDk3NTIzNzAyMjg4Mzg1.YXK6dw.unwmdJC71jgyNOu3_e7Ga9MjMTA")
+    client.run("OTAxMDk3NTIzNzAyMjg4Mzg1.YXK6dw.6mf58Yyh4jc5oOHA9ibjIvNwKm0")
