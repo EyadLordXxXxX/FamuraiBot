@@ -1463,7 +1463,7 @@ class AcceptDenyBugga(View):
             await interaction.send("You ran out of time!")
             return
 
-        if msg == ["Yes", "yes", "Sure", "sure", "Yeah", "yeah", "Yea", "yea", "Yep", "yep"]:
+        if msg == "Yes":
             await interaction.send("Write your message! Include this: `Thank you for your bug report, We appreciate your enthusiasm, *your message here*`")
 
             try:
@@ -1485,7 +1485,7 @@ class AcceptDenyBugga(View):
 
             await user.send(msg)
 
-        elif msg == ["No", "no", "Nah", "nah", "Na", "na"]:
+        elif msg == "No":
             user = view.interaction.user
             await user.send("Thank you for your bug report, We appreciate your enthusiasm, but your suggestion was declined!")
             await interaction.send("Okay, I guess, sent.")
