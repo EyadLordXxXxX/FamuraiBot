@@ -2,7 +2,7 @@ import nextcord
 from nextcord import (
     Interaction
 )
-from nextcord.ext import commands
+from nextcord.ext import commands, ipc
 from nextcord.ext.commands import (
     BucketType,
     Cooldown,
@@ -22,18 +22,37 @@ from typing import (
     List,
     Callable,
 )
+import logging
 
 import aiohttp
 import humanfriendly
 import yarsaw
 import asyncio
 import gtts
-import logging
 
 import motor
 import motor.motor_asyncio
 
+class FamuClient(commands.Bot):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		self.ipc = ipc.Server(self, secret_key="Famurai")
+
+	async def on_ipc_ready(self):
+		"""Called upon the IPC Server being ready"""
+		print("IPC server is ready.")
+
+	async def on_ipc_error(self, endpoint, error):
+		"""Called upon an error being raised within an IPC route"""
+		print(endpoint, "raised", error)
+
 from urllib.parse import quote_plus
+logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.CRITICAL)
+logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 
 def edited_cooldown(rate, per, type=BucketType.default):
     cooldown = Cooldown(rate, per)
@@ -48,12 +67,6 @@ def edited_cooldown(rate, per, type=BucketType.default):
         return func
     return decorator
 
-logging.basicConfig(level=logging.INFO)
-logging.basicConfig(level=logging.ERROR)
-logging.basicConfig(level=logging.CRITICAL)
-logging.basicConfig(level=logging.DEBUG)
-logging.basicConfig(level=logging.WARNING)
-
 bot = yarsaw.Client("ybSHEatbivek", "0fc8104d3bmsh9fcc7b9c2a86b3fp14c1ebjsn3b44d7af5e86") 
 
 guilds = 914050761917362186
@@ -62,7 +75,7 @@ intents = nextcord.Intents.all()
 intents.members = True
 intents.guilds = True
 
-client = commands.Bot(
+client = FamuClient(
     command_prefix="?", 
     intents=intents, 
     help_command=None,
@@ -79,6 +92,22 @@ memberlevels = db.level
 
 client.activity = nextcord.Game(name=f"Prefix - Slash Commands / | In {len([guild for guild in client.guilds])} guilds")
 
+@client.ipc.route()
+async def get_guild_count(data):
+	return len(client.guilds) # returns the len of the guilds to the client
+
+@client.ipc.route()
+async def get_guild_ids(data):
+	final = []
+	for guild in client.guilds:
+		final.append(guild.id)
+	return final # returns the guild ids to the client
+
+@client.event
+async def on_ready():
+    """Called upon the bot being ready"""
+    print('We are logged in as Famurai#5159 by FlameyosFlow#8894!')
+
 class Google(View):
     def __init__(self, query: str):
         super().__init__()
@@ -90,7 +119,7 @@ class Google(View):
         
 @client.slash_command(description="Search on google directly using this command!")
 async def google(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     query: str = nextcord.SlashOption(
         name="search",
         description="What would you like to search on google?",
@@ -102,7 +131,7 @@ async def google(
 
 @client.slash_command(description="Greentext your text!")
 async def greentext(
-    interaction: nextcord.Interaction,
+    interaction: Interaction,
     text: str = nextcord.SlashOption(
         name="text",
         description="What would you like to greentext?",
@@ -233,7 +262,7 @@ async def talk(interaction):
 
 @client.slash_command(description="Set a reminder!")
 async def remindme(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     time = nextcord.SlashOption(
         name="time",
         description="How long is the timer? ex: 6h or 7d",
@@ -271,7 +300,7 @@ async def leave(interaction):
 
 @client.slash_command(description="Create a giveaway with this command!")
 async def gstart(
-    inter: nextcord.Interaction, 
+    inter: Interaction, 
     duration = nextcord.SlashOption(
         name="time",
         description="How long should it last? ex: 7d or 12h",
@@ -647,7 +676,7 @@ async def tastyfood(interaction):
 
 @client.slash_command(name="dice", description="Roll The Dice And Bet From 1 to 6")
 async def dice(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     bet: int = nextcord.SlashOption(
         name="bet",
         description="What do you wanna bet? 1-6",
@@ -710,7 +739,7 @@ async def dice(
 
 @client.slash_command(name="adventure", description="Stop it, Go Travel.")
 async def adventure(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     direction = nextcord.SlashOption(
         name="direction",
         choices={"Left", "Right", "Middle"},
@@ -790,25 +819,23 @@ async def adventure(
 
 @client.slash_command(description="See someone's avatar!")
 async def avatar(
-    interaction: nextcord.Interaction,
+    interaction: Interaction,
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who are we taking avatar's picture?",
         required=False
     )
 ):
-    async with interaction.channel.typing():
-        if not member:
-            member = interaction.user
+    await interaction.response.defer()
+    member = member or interaction.user
 
-        if member == interaction.user:
-            await interaction.send(embed=nextcord.Embed(title=f"Here is your avatar!").set_image(url=member.avatar.url))
-        else:
-            await interaction.send(embed=nextcord.Embed(title=f"Here is {member.name}'s avatar!").set_image(url=member.avatar.url))
+    async with interaction.channel.typing():
+        await interaction.followup.send(embed=nextcord.Embed(title=f"Here is {member.name}'s avatar!").set_image(url=member.display_avatar.url))
+    return
 
 @client.slash_command(name="bal", description="Check your balance!")
 async def balance(
-    interaction: nextcord.Interaction,
+    interaction: Interaction,
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who's balance are we checking?",
@@ -836,7 +863,7 @@ async def balance(
 
 @client.slash_command(name="beg", description="Beg off the streets!")
 @commands.cooldown(rate=2, per=30.0, type=BucketType.user)
-async def beg(interaction: nextcord.Interaction):
+async def beg(interaction: Interaction):
     member = interaction.user
     findbank = await collection.find_one({"_id": member.id})
     if not findbank:
@@ -866,13 +893,13 @@ class ConfirmDEP(View):
         self.value = None
 
     @button(label='Confirm', style=nextcord.ButtonStyle.green)
-    async def confirm(self, button: Button, interaction: nextcord.Interaction):
+    async def confirm(self, button: Button, interaction: Interaction):
         await interaction.response.send_message("You have confirmed this deposit!", ephemeral=True)
         self.value = True
         self.stop()
 
     @button(label='Cancel', style=nextcord.ButtonStyle.red)
-    async def cancel(self, button: Button, interaction: nextcord.Interaction):
+    async def cancel(self, button: Button, interaction: Interaction):
         await interaction.response.send_message("You have cancelled this deposit!", ephemeral=True)
         self.value = False
         self.stop()
@@ -882,7 +909,7 @@ class ConfirmDEP(View):
     description="Deposit some money to your bank!"
 )
 async def deposit(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     amount: int = nextcord.SlashOption(
         name="amount",
         description="How much do you want to deposit?",
@@ -933,7 +960,7 @@ async def deposit(
                 await interaction.response.send_message("You have cancelled this deposit!", ephemeral=True)
 
 @client.slash_command(name="daily", description="Get daily money!")
-async def daily(interaction: nextcord.Interaction):
+async def daily(interaction: Interaction):
     async with interaction.channel.typing():
         member = interaction.user
         findbank = await collection.find_one({"_id": member.id})
@@ -947,7 +974,7 @@ async def daily(interaction: nextcord.Interaction):
         await interaction.send(f"You have recieved 10000 from /daily, see you next day!")
 
 @client.event
-async def on_command_error(interaction: nextcord.Interaction, error):
+async def on_command_error(interaction: Interaction, error):
     if isinstance(error, commands.CommandNotFound):
         em = nextcord.Embed(
             title = "That command was not found!",
@@ -973,7 +1000,7 @@ async def on_ready():
     print('We are logged in as {0.user} by FlameyosFlow#8894!'.format(client))
 
 @client.slash_command(name="ping", description="Famurai latency!")
-async def ping(interaction: nextcord.Interaction):
+async def ping(interaction: Interaction):
     async with interaction.channel.typing():
         if round(client.latency * 1000) <= 50:
             embed = nextcord.Embed(
@@ -1007,7 +1034,7 @@ async def ping(interaction: nextcord.Interaction):
 
 @client.slash_command(name="8ball", description="You have called the 8ball to predict the future for you.")
 async def _8ball(
-    interaction: nextcord.Interaction, *, 
+    interaction: Interaction, *, 
     question: str = nextcord.SlashOption(
         name="question",
         description="What question do you wanna ask the bot?",
@@ -1054,7 +1081,7 @@ async def _8ball(
 @client.slash_command(name="search", description="Search for coins all around the world!")
 @commands.cooldown(1, 120, BucketType.user)
 async def search(
-    interaction: nextcord.Interaction, *, 
+    interaction: Interaction, *, 
     where: str = nextcord.SlashOption(
         name="area",
         description="Where do you wanna search for money?",
@@ -1335,7 +1362,7 @@ async def search(
 
 @client.slash_command(name="afk", description="Make everyone know your away from keyboard!")
 async def afk(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     reason = nextcord.SlashOption(
         name="reason",
         description="What is the reason?",
@@ -1364,7 +1391,7 @@ async def afk(
             await interaction.send(embed=em1)
 
 @client.slash_command(name="unafk", description="Make everyone know your not away from keyboard anymore!")
-async def unafk(interaction: nextcord.Interaction):
+async def unafk(interaction: Interaction):
     async with interaction.channel.typing():
         try:
             if "[AFK]" in interaction.user.display_name:
@@ -1424,7 +1451,7 @@ petshop = [
 
 @client.slash_command(name="gay", description="Test people's gayness!")
 async def gay(
-    interaction: nextcord.Interaction, *, 
+    interaction: Interaction, *, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who do you want to test gayness on?",
@@ -1446,7 +1473,7 @@ async def gay(
             await interaction.response.send_message(embed=em)
 
 @client.slash_command(name="company", description="Company!")
-async def company(interaction: nextcord.Interaction):
+async def company(interaction: Interaction):
     pass
 
 @company.subcommand(name="upgrade", description="Upgrade your company!")
@@ -1619,7 +1646,7 @@ async def company_create(interaction):
             await interaction.send("You already have a company, no need for a new one!")
 
 @client.slash_command(name="work", description="Work and get Money!")
-async def work(interaction: nextcord.Interaction):
+async def work(interaction: Interaction):
     await interaction.response.defer()
     async with interaction.channel.typing():
         user = interaction.user
@@ -1671,7 +1698,7 @@ async def work(interaction: nextcord.Interaction):
             await companyaa.update_one({"_id": user.id}, {"$set": {"worth": updated_worth}})
             
 @client.slash_command(name="credits", description="List of people who helped.")
-async def credits(interaction: nextcord.Interaction):
+async def credits(interaction: Interaction):
     async with interaction.channel.typing():
 
         em = nextcord.Embed(title="Credits", description="These are a list of people who helped with the bot", color=nextcord.Color.random())
@@ -1681,7 +1708,7 @@ async def credits(interaction: nextcord.Interaction):
         await interaction.response.send_message(embed=em)
 
 @client.slash_command(name="discordserv", description="Get the link to the discord server")
-async def nextcordserv(interaction: nextcord.Interaction):
+async def nextcordserv(interaction: Interaction):
     await interaction.response.send_message("Look in my bio. :D")
 
 class Confirm(View):
@@ -1690,13 +1717,13 @@ class Confirm(View):
         self.value = None
 
     @button(label='Confirm', style=nextcord.ButtonStyle.green)
-    async def confirm(self, button: Button, interaction: nextcord.Interaction):
+    async def confirm(self, button: Button, interaction: Interaction):
         await interaction.response.send_message("You have confirmed this withdraw!", ephemeral=True)
         self.value = True
         self.stop()
 
     @button(label='Cancel', style=nextcord.ButtonStyle.red)
-    async def cancel(self, button: Button, interaction: nextcord.Interaction):
+    async def cancel(self, button: Button, interaction: Interaction):
         await interaction.response.send_message("You have cancelled this withdraw!", ephemeral=True)
         self.value = False
         self.stop()
@@ -1706,7 +1733,7 @@ class Confirm(View):
     description="Withdraw some money to your wallet!"
 )
 async def withdraw(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     amount: int = nextcord.SlashOption(
         name="amount",
         description="How much do you want to withdraw?",
@@ -1766,7 +1793,7 @@ class TicTacToeButton(Button['TicTacToe']):
 
     # This function is called whenever this particular button is pressed
     # This is part of the "meat" of the game logic
-    async def callback(self, interaction: nextcord.Interaction):
+    async def callback(self, interaction: Interaction):
         assert self.view is not None
         view: TicTacToe = self.view
         state = view.board[self.y][self.x]
@@ -1859,7 +1886,7 @@ class TicTacToe(View):
     name="tic",
     description="Tic Tac Toe!"
 )
-async def tic(interaction: nextcord.Interaction):
+async def tic(interaction: Interaction):
     async with interaction.channel.typing():
         await interaction.response.send_message('Tic Tac Toe: X goes first', view=TicTacToe())
 
@@ -1868,7 +1895,7 @@ async def tic(interaction: nextcord.Interaction):
     description="Rob some innocent people!"
 )
 @commands.cooldown(1, 180, BucketType.user) 
-async def rob(interaction: nextcord.Interaction, member: nextcord.Member = nextcord.SlashOption(name="member", description="Who is the unlucky person?", required=True)):
+async def rob(interaction: Interaction, member: nextcord.Member = nextcord.SlashOption(name="member", description="Who is the unlucky person?", required=True)):
     async with interaction.channel.typing():
         fmb = await collection.find_one({"_id": member.id})
         fb = await collection.find_one({"_id": interaction.user.id})
@@ -1978,7 +2005,7 @@ async def rob(interaction: nextcord.Interaction, member: nextcord.Member = nextc
     description="Turn numbers and letters into emojis",
 )
 async def emojify(
-    interaction: nextcord.Interaction, *, 
+    interaction: Interaction, *, 
     message = nextcord.SlashOption(
         name="message",
         description="What is your message?",
@@ -2060,7 +2087,7 @@ huglink = [
     description="Bully some kids, hehe ;D",
 )
 async def bully(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who is the unlucky person?",
@@ -2074,7 +2101,7 @@ async def bully(
 
 @client.slash_command(name="yeet", description="Yeet some kids, hehe ;D")
 async def yeet(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who is the unlucky person?",
@@ -2088,7 +2115,7 @@ async def yeet(
 
 @client.slash_command(name="kiss", description="Kiss someone.")
 async def kiss(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who is the lucky person?",
@@ -2102,7 +2129,7 @@ async def kiss(
 
 @client.slash_command(name="shoot", description="Shoot some kids, hehe ;D")
 async def shoot(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who is the unlucky person?",
@@ -2116,7 +2143,7 @@ async def shoot(
 
 @client.slash_command(name="stab", description="Stab some kids, hehe ;D")
 async def stab(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who is the unlucky person?",
@@ -2130,7 +2157,7 @@ async def stab(
 
 @client.slash_command(name="slap", description="Slap some kids, hehe ;D")
 async def slap(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who is the unlucky person?",
@@ -2144,7 +2171,7 @@ async def slap(
 
 @client.slash_command(name="hug", description="Hug some people.")
 async def hug(
-    interaction: nextcord.Interaction, 
+    interaction: Interaction, 
     member: nextcord.Member = nextcord.SlashOption(
         name="member",
         description="Who is the unlucky person?",
@@ -2157,12 +2184,12 @@ async def hug(
         await interaction.response.send_message(embed=embed)
 
 @client.slash_command(name="say", description="Make the bot say anything!")
-async def say(interaction: nextcord.Interaction, message = nextcord.SlashOption(description="What is the message?")):
+async def say(interaction: Interaction, message = nextcord.SlashOption(description="What is the message?")):
     async with interaction.channel.typing():
         await interaction.send(f"{message}")
 
 @client.slash_command(name="rps", description="Rock Paper Scissors")
-async def rps(interaction: nextcord.Interaction, mode = nextcord.SlashOption(description="What mode? rock, paper, scissors?", required=True)):
+async def rps(interaction: Interaction, mode = nextcord.SlashOption(description="What mode? rock, paper, scissors?", required=True)):
     s = ["scissors","Scissors"]
     p = ["paper","Paper"]
     r = ["rock","Rock"]
@@ -2177,6 +2204,855 @@ async def rps(interaction: nextcord.Interaction, mode = nextcord.SlashOption(des
         return
 
     if b2 == "scissors":
+        if mode in s:
+            await interaction.send(f"My choice was scissors aswell, So It was a tie!")
+        if mode in p:
+            await interaction.send(f"My choice was scissors, so you lost! :rofl:")
+        if mode in r:
+            await interaction.send(f"My choice was scissors, so you won! :sob:")
+
+    if b2 == "paper":
+        if mode in s:
+            await interaction.send(f"My choice was paper, so you won! :sob:")
+        if mode in p:
+            await interaction.send(f"My choice was paper aswell, So It was a tie!")
+        if mode in r:
+            await interaction.send(f"My choice was paper, so you lost! :rofl:")
+
+    if b2 == "rock":
+        if mode in s:
+            await interaction.send(f"My choice was rock, so you lost! :rofl:")
+        if mode in p:
+            await interaction.send(f"My choice was rock! You won! :sob:")
+        if mode in r:
+            await interaction.send(f"My choice was rock aswell, So It was a tie!")
+
+@client.slash_command(name="casino", description="Casino some money!")
+async def casino(
+    interaction: Interaction, 
+    amount = nextcord.SlashOption(
+        name="amount",
+        description="How much do you want to bet?",
+        required=True
+    )
+):
+    async with interaction.channel.typing():
+        user = interaction.user
+        findbank = await collection.find_one({"_id": user.id})
+        if not findbank:
+            await collection.insert_one({"_id": user.id, "wallet": 0, "bank": 0})
+
+        wallet = findbank["wallet"]
+
+        amount = int(amount)
+
+        if amount > int(wallet):
+            await interaction.send('You do not have sufficient balance')
+            return
+
+        if amount < 0:
+            await interaction.send('Amount must be positive!')
+            return
+
+        final = []
+        for i in range(0, 3):
+            a = random.choice(['X','O','Q'])
+
+            final.append(a)
+
+        if final[0] == final[1] or final[1] == final[2] or final[0] == final[2]:
+            uw = wallet + amount
+            await collection.update_one({"_id": interaction.user.id}, {"$set": {"wallet": uw}})
+            await interaction.send(f'You won {amount} {user.mention}!')
+        else:
+            uw = wallet - amount
+            await collection.update_one({"_id": interaction.user.id}, {"$set": {"wallet": uw}})
+            await interaction.send(f'You lose {amount} {user.mention}!')
+
+@client.slash_command(name="shop", description="Look at the Shop!")
+async def shop(interaction: Interaction):
+    async with interaction.channel.typing():
+        em = nextcord.Embed(title="Shop", color=nextcord.Color.blue())
+
+        for item in mainshop:
+            name = item["name"]
+            price = item["price"]
+            desc = item["description"]
+            em.add_field(name=f"{name}", value="${:,} | {}".format(price, desc), inline=False)
+
+        await interaction.send(embed=em)
+
+# some disabled commands
+"""
+@client.slash_command(name="buy", description="Buy something from the shop!")
+async def buy(interaction: Interaction, item = nextcord.SlashOption(description="What is the item?"), amount: int = nextcord.SlashOption(description="How much of that item?")):
+    async with interaction.channel.typing():
+        await open_account(interaction.user)
+
+        res = await buy_this(interaction.user,item,amount)
+
+        if not res[0]:
+            if res[1]==1:
+                await interaction.send("That Object isn't there!")
+                return
+            elif res[1]==2:
+                await interaction.send(f"You don't have enough money in your wallet to buy {amount} {item}")
+                return
+
+            else:
+                await interaction.send(f"You just bought {item} for ${amount}!")
+
+async def buy_this(user,item_name,amount):
+    item_name = item_name.lower()
+    name_ = None
+    for item in mainshop:
+        name = item["name"].lower()
+        if name == item_name:
+            name_ = name
+            price = item["price"]
+            break
+
+    if name_ == None:
+        return [False,1]
+
+    cost = price*amount
+
+    users = await get_bank_data()
+
+    bal = await update_bank(user)
+
+    if bal[0]<cost:
+        return [False,2]
+
+
+    try:
+        index = 0
+        t = None
+        for thing in users[str(user.id)]["bag"]:
+            n = thing["item"]
+            if n == item_name:
+                old_amt = thing["amount"]
+                new_amt = old_amt + amount
+                users[str(user.id)]["bag"][index]["amount"] = new_amt
+                t = 1
+                break
+            index+=1 
+        if t == None:
+            obj = {"item":item_name , "amount" : amount}
+            users[str(user.id)]["bag"].append(obj)
+    except:
+        obj = {"item":item_name , "amount" : amount}
+        users[str(user.id)]["bag"] = [obj]        
+
+    with open("mainbank.json","w") as f:
+        json.dump(users,f)
+
+    await update_bank(user,-1*cost,"wallet")
+
+    return [True,"Worked"]
+
+
+@client.slash_command(name="bag", description="What do we have here?")
+async def bag(interaction: Interaction):
+    async with interaction.channel.typing():
+        await open_account(interaction.user)
+        user = interaction.user
+        users = await get_bank_data()
+
+        try:
+            bag = users[str(user.id)]["bag"]
+        except:
+            bag = []
+
+
+        em = nextcord.Embed(title = "Bag")
+        for item in bag:
+            name = item["item"]
+            amount = item["amount"]
+
+            em.add_field(name = name, value = amount)    
+
+        await interaction.send(embed=em)
+
+@client.slash_command(name="sell", description="Sell something to the shop!")
+async def sell(interaction: Interaction, item = nextcord.SlashOption(description="What is the item?"), amount = nextcord.SlashOption(description="How much of that?")):
+    async with interaction.channel.typing():
+        await open_account(interaction.user)
+
+        res = await sell_this(interaction.user,item,amount)
+
+        if not res[0]:
+            if res[1]==1:
+                await interaction.send("That Object isn't there!")
+                return
+            if res[1]==2:
+                await interaction.send(f"You don't have {amount} {item} in your bag.")
+                return
+            if res[1]==3:
+                await interaction.send(f"You don't have {item} in your bag.")
+                return
+
+        await interaction.send(f"You just sold {amount} {item}.")
+
+async def sell_this(user,item_name,amount,price = None):
+    item_name = item_name.lower()
+    name_ = None
+    for item in mainshop:
+        name = item["name"].lower()
+        if name == item_name:
+            name_ = name
+            if price==None:
+                price = 0.7* item["price"]
+            break
+
+    if name_ == None:
+        return [False,1]
+
+    cost = price*amount
+
+    users = await get_bank_data()
+
+    try:
+        index = 0
+        t = None
+        for thing in users[str(user.id)]["bag"]:
+            n = thing["item"]
+            if n == item_name:
+                old_amt = thing["amount"]
+                new_amt = old_amt - amount
+                if new_amt < 0:
+                    return [False,2]
+                users[str(user.id)]["bag"][index]["amount"] = new_amt
+                t = 1
+                break
+            index+=1 
+        if t == None:
+            return [False,3]
+    except:
+        return [False,3]    
+
+    with open("mainbank.json","w") as f:
+        json.dump(users,f)
+
+    await update_bank(user,cost,"wallet")
+
+    return [True,"Worked"]
+
+@client.slash_command(name="lb", description="Leaderboard of people, ranked by money!")
+async def lb(interaction: Interaction):
+    x: int = 10
+    async with interaction.channel.typing():
+        users = await get_bank_data()
+        leader_board = {}
+        total = []
+        for user in users:
+            name = int(user)
+            total_amount = users[user]["wallet"] + users[user]["bank"]
+            leader_board[total_amount] = name
+            total.append(total_amount)
+
+        total = sorted(total, reverse=True)
+
+        em = nextcord.Embed(title=f"Top {x} Richest People", description="This is decided on the basis of raw money in the wallet and bank.", color=nextcord.Color.blurple())
+        index = 1
+        for amt in total:
+            id_ = leader_board[amt]
+            member = await interaction.guild.fetch_member(id_)
+            name = member.name
+            em.add_field(name=f"{index}. {name}", value=f"{amt}", inline=False)
+            if index == x:
+                break
+            else:
+                index += 1
+        await interaction.send(embed=em)
+"""
+@client.slash_command(name="info", description="Info about someone!")
+async def info(
+    interaction: Interaction, 
+    member: nextcord.Member = nextcord.SlashOption(
+        name="member",
+        description="Who do you want to check information on?",
+        required=False
+    )
+):
+    async with interaction.channel.typing():
+        if member == None:
+            user = interaction.user
+        else:
+            user = member
+
+        roles = [role for role in user.roles]
+
+        isBot = user.bot
+        if isBot == True:
+            isBot = "BOT"
+        else:
+            isBot = "Member"
+
+        embed = nextcord.Embed(title=f"Information on {user}.", color=user.color)
+        embed.set_author(name=user.name, icon_url=user.avatar.url)
+        embed.set_footer(text=f"Requested by: {interaction.user}", icon_url=interaction.user.avatar.url)
+        embed.add_field(name="ID:", value=user.id, inline=True)
+        embed.add_field(name="Member Nickname:", value=user.nick, inline=True)
+        embed.add_field(name="Current Status:",
+                        value=str(user.status).title(),
+                        inline=True)
+        embed.add_field(
+            name="Current Activity:",
+            value=
+            f"{str(user.activity.type).title().split('.')[1]}: {user.activity.name}"
+            if user.activity is not None else "None",
+            inline=True)
+        embed.add_field(
+            name="Account created at:",
+            value=user.created_at.strftime("%A %B %-d, %Y, %-I:%M %p %Z"),
+            inline=True)
+        embed.add_field(
+            name="Server joined at:",
+            value=user.joined_at.strftime("%A %B %-d, %Y, %-I:%M %p %Z"),
+            inline=True)
+        embed.add_field(name=f"Roles [{len(roles)}]",
+                        value=" **|** ".join([role.mention for role in roles]),
+                        inline=True)
+        embed.add_field(name="Major Role:", value=user.top_role, inline=True)
+        embed.add_field(name="Type:", value=isBot, inline=True)
+        await interaction.response.send_message(embed=embed)
+        return
+
+@client.slash_command(name="cc", description="Create a category!")
+async def cc(interaction: Interaction, name = nextcord.SlashOption(description="What is the name?")):
+    if not (interaction.user.guild_permissions.manage_channels):
+        await interaction.response.send_message("You can't use this.", ephemeral=True)
+        pass
+
+    else:
+        async with interaction.channel.typing():
+
+            await interaction.guild.create_category(name)
+            await interaction.send(f"created category {name}")
+
+@client.slash_command(name="ctc", description="Create a text channel!")
+async def ctc(interaction: Interaction, name = nextcord.SlashOption(description="What is the name?")):
+    if not (interaction.user.guild_permissions.manage_channels):
+        await interaction.response.send_message("You can't use this.", ephemeral=True)
+        pass
+
+    else:
+        async with interaction.channel.typing():
+
+            await interaction.guild.create_text_channel(name)
+            await interaction.send(f"created text channel {name}")
+
+@client.slash_command(name="cvc", description="Create a voice channel!")
+async def cvc(interaction: Interaction, *, name = nextcord.SlashOption(description="What is the name?")):
+    if not (interaction.user.guild_permissions.manage_channels):
+        await interaction.response.send_message("You can't use this.", ephemeral=True)
+        pass
+
+    else:
+        async with interaction.channel.typing():
+        
+            await interaction.guild.create_voice_channel(name)
+            await interaction.send(f"created voice channel {name}")
+
+@client.slash_command(name="ar", description="Add a role to Someone!")
+async def ar(interaction: Interaction, *, user: nextcord.Member = nextcord.SlashOption(description="Who is the person?"), role: nextcord.Role = nextcord.SlashOption(description="What is the role?")):
+    if not (interaction.user.guild_permissions.manage_roles):
+        await interaction.response.send_message("You can't use this.", ephemeral=True)
+        pass
+
+    else:
+        async with interaction.channel.typing():
+        
+            if role in user.roles:
+                await interaction.send(f"{user} already has this role called {role}.")
+                return
+            else:
+                await user.add_role(role)
+                await interaction.send(f"Added {role} to {user.mention}.")
+
+@client.slash_command(name="rr", description="Remove a role from Someone!")
+async def rr(interaction: Interaction, *, user: nextcord.Member = nextcord.SlashOption(description="Who is the person?"), role: nextcord.Role = nextcord.SlashOption(description="What is the role?")):
+    if not (interaction.user.guild_permissions.manage_roles):
+        await interaction.response.send_message("You can't use this.", ephemeral=True)
+        pass
+
+    else:
+        async with interaction.channel.typing():
+
+            if role not in user.roles:
+                await interaction.send(f"{user} already doesn't have this role called {role}.")
+                return
+            else:
+                await user.remove_role(role)
+                await interaction.send(f"Removed {role} to {user.mention}.")
+
+Facts = [
+    "Over 550 million heartbeats happen every 1 minute and it keeps increasing.",
+    "McDonald’s once made bubblegum-flavored broccoli",
+    "Some fungi create zombies, then control their minds",
+    "The first oranges weren’t orange",
+    "There’s only one letter that doesn’t appear in any U.S. state name",
+    "A cow-bison hybrid is called a **beefalo**"
+]
+
+Dadjokes = [
+    "Why did the orange lose the race? It ran out of juice.",
+    "How you fix a broken pumpkin? With a pumpkin patch.",
+    "Why are fish so smart? They live in schools!",
+    "What's the best thing about Switzerland? I don't know, but the flag is a big plus.",
+    "Why did the man fall down the well? Because he couldn’t see that well!",
+    "Why do peppers make such good archers? Because they habanero.",
+    "What did the sink tell the toilet? You look flushed!",
+    "Where do boats go when they're sick? To the dock.",
+    "What has ears but cannot hear? A cornfield!",
+    "Stop looking for the perfect match; use a lighter.",
+    "Can February March? No, but April May!",
+    "Why was 6 afraid of 7? Because 7 ate nine!",
+    "I'm so good at sleeping that I do it with my eyes closed.",
+    "Try the seafood diet—you see food, then you eat it.",
+    "What do you call a pencil with two erasers? Pointless.",
+    "Did you hear the one about the roof? Never mind, it's over your head.",
+    "What's brown and sticky? A stick.",
+    "I hated facial hair but then it grew on me.",
+    "It really takes guts to be an organ donor.",
+    "Did you hear the rumor about butter? Well, I'm not going to go spreading it!",
+    "What did the plumber say to the singer? Nice pipes.",
+    "I was going to tell a time-traveling joke, but you didn't like it.",
+    "How do you deal with a fear of speed bumps? You slowly get over it.",
+    "I ordered a chicken and an egg online. I'll let you know.",
+    "I'm reading an anti-gravity book. I can't put it down!",
+    "I'd avoid the sushi if I were you. It's a little fishy!",
+    "What state is known for its small drinks? Minnesota.",
+    "What's Forrest Gump's password? 1forrest1",
+    "What do houses wear? An address.",
+    "What did the two pieces of bread say on their wedding day? It was loaf at first sight.",
+    "What kind of shoes does a lazy person wear? Loafers.",
+    "What did the ocean say to the beach? Nothing, it just waved.",
+    "What happens when a snowman throws a tantrum? He has a meltdown."
+]
+
+@client.slash_command(name="clear", description="Clear messages!")
+async def clear(
+    interaction: Interaction, 
+    amount: int = nextcord.SlashOption(
+        name="amount",
+        description="How many messages do you want to delete?",
+        required=True
+    ),
+):
+    async with interaction.channel.typing():
+        if not (interaction.user.guild_permissions.manage_channels):
+            await interaction.response.send_message("You can't use this as you don't have `manage channels` perission.", ephemeral=True)
+            return
+
+        else:
+
+            amount = amount + 1
+            if amount > 101:
+                await interaction.response.send_message("{} needs to be under 101 at least.".format(amount - 1), ephemeral=True)
+                return
+
+            if amount <= 0:
+                await interaction.response.send_message("{} needs to be above 0 at least.".format(amount - 1), ephemeral=True)
+                return
+
+            await interaction.channel.purge(limit=amount)
+            em = nextcord.Embed(title=f"{amount} message(s) has been deleted", description="Use /clear <amount> to use this command again!", color=nextcord.Color.green())
+            await interaction.send(embed=em)
+            await asyncio.sleep(5)
+            await (await interaction.original_message()).delete()
+            return
+
+@client.slash_command(name="poll", description="Make a Poll!")
+async def poll(
+    interaction: Interaction, 
+    topic = nextcord.SlashOption(
+        name="topic",
+        description="What is the topic of this poll?",
+        required=True,
+    ), 
+    choice1 = nextcord.SlashOption(
+        name="choice1",
+        description="First Choice.",
+        required=True 
+    ), 
+    choice2 = nextcord.SlashOption(
+        name="choice2",
+        description="Second Choice.",
+        required=True,
+    ),
+    c3 = nextcord.SlashOption(
+        name="choice3",
+        description="Third Choice.",
+        required=False,
+    ),
+    c4 = nextcord.SlashOption(
+        name="choice4",
+        description="Fourth Choice.",
+        required=False,
+    ),
+    c5 = nextcord.SlashOption(
+        name="choice5",
+        description="Fifth Choice.",
+        required=False,
+    ),
+    c6 = nextcord.SlashOption(
+        name="choice6",
+        description="Sixth Choice.",
+        required=False,
+    ),
+    c7 = nextcord.SlashOption(
+        name="choice7",
+        description="Seventh Choice.",
+        required=False,
+    ),
+    c8 = nextcord.SlashOption(
+        name="choice8",
+        description="Eighth Choice.",
+        required=False,
+    ),
+    c9 = nextcord.SlashOption(
+        name="choice9",
+        description="Ninth Choice.",
+        required=False,
+    ),
+    c10 = nextcord.SlashOption(
+        name="choice10",
+        description="Tenth Choice.",
+        required=False,
+    ),
+):
+    async with interaction.channel.typing():
+        choices = [choice1, choice2, c3, c4, c5, c6, c7, c8, c9, c10]
+        choice_reactions = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+        embed = nextcord.Embed(
+            title=topic,
+            description="",
+            color=nextcord.Color.green(),
+            timestamp=datetime.datetime.utcnow()
+        )
+        embed.set_author(name="Requested by " + interaction.user.name, icon_url=interaction.user.avatar.url)
+        options = [c for c in choices if c is not None]
+        optionreaction = [cr for cr in choice_reactions if options is not None]
+
+        for i in range(0, len(options)):
+            embed.description += f'{optionreaction[i]} {options[i]}\n'
+
+        await interaction.send(embed=embed)
+
+        embed_msg = (await interaction.original_message())
+
+        for i in range(0, len(options)):
+            await embed_msg.add_reaction(optionreaction[i])
+
+    return
+
+@client.slash_command(name="kick", description="Kick someone!")
+async def kick(
+    interaction: Interaction, 
+    member: nextcord.Member = nextcord.SlashOption(
+        name="member",
+        description="Who do you want to kick?",
+        required=True
+    ),
+
+    reason = nextcord.SlashOption(
+        name="reason",
+        description="What is the reason of kicking this member?",
+        required=False
+    ),
+):
+    async with interaction.channel.typing():
+        if not (interaction.user.guild_permissions.kick_members):
+            await interaction.response.send_message("You can't use this.", ephemeral=True)
+            pass
+            
+        else:
+            if member == interaction.user:
+
+                await interaction.send("You can't kick yourself!")
+                return
+            else:
+                await member.kick(reason=reason)
+                embed2 = nextcord.Embed(
+                    title=f"Kicked {member.name}!", 
+                    description="Information about the kicked user.", 
+                    color=nextcord. Color.red()
+                )
+                embed2.add_field(
+                    name="**Kicked by:**", 
+                    value=f"{interaction.user.mention}", 
+                    inline=False
+                )
+                embed2.add_field(
+                    name="**Kicked from**", 
+                    value=f"{interaction.guild}", 
+                    inline=False
+                )
+                embed2.add_field(
+                    name="**Kicked for:**", 
+                    value=f"{reason}", 
+                    inline=False
+                )
+                await interaction.send(embed=embed2)
+                em = nextcord.Embed(
+                    title="You were kicked!", 
+                    description="Information about you.", 
+                    color=nextcord.Color.red()
+                )
+                em.add_field(
+                    name="**Kicked by:**", 
+                    value=f"{interaction.user.mention}", 
+                    inline=False
+                )
+                em.add_field(
+                    name="**Kicked from:**", 
+                    value=f"{interaction.guild}", 
+                    inline=False
+                )
+                em.add_field(
+                    name="**Kicked for:**", 
+                    value=f"{reason}", 
+                    inline=False    
+                )
+                await member.send(embed=em)
+
+@client.slash_command(name="ban", description="Ban someone!")
+async def ban(interaction: Interaction, member: nextcord.Member = nextcord.SlashOption(description="Who is the person?"), *, reason=nextcord.SlashOption(description="What is the person?")):
+    async with interaction.channel.typing():
+        if not (interaction.user.guild_permissions.ban_members):
+            await interaction.response.send_message("You can't use this.", ephemeral=True)
+            pass
+
+        else:
+
+            if member == interaction.user:
+
+                await interaction.send("You can't ban yourself!")
+                return
+            else:
+                await member.ban(reason=reason)
+                embed2 = nextcord.Embed(
+                    title=f"Banned {member.name}!", 
+                    description="Information about the banned user.", color=nextcord.Color.red()
+                )
+                embed2.add_field(
+                    name="**Banned by:**", 
+                    value=f"{interaction.user.mention}", 
+                    inline=False
+                )
+                embed2.add_field(
+                    name="**Banned from**", 
+                    value=f"{interaction.guild}", 
+                    inline=False
+                )
+                embed2.add_field(
+                    name="**Banned for:**", 
+                    value=f"{reason}", 
+                    inline=False
+                )
+                await interaction.send(embed=embed2)
+                em = nextcord.Embed(
+                    title="You were Banned!", 
+                    description="Information about you.", 
+                    color=nextcord.Color.red()
+                )
+                em.add_field(
+                    name="**Banned by:**", 
+                    value=f"{interaction.user.mention}", 
+                    inline=False
+                )
+                em.add_field(
+                    name="**Banned from:**", 
+                    value=f"{interaction.guild}", 
+                    inline=False
+                )
+                em.add_field(
+                    name="**Banned for:**", 
+                    value=f"{reason}", 
+                    inline=False
+                )
+                await member.send(embed=em)
+            
+@client.slash_command(name="mute", description="Mute someone!")
+async def mute(
+    interaction: Interaction, 
+    time = nextcord.SlashOption(
+        name="time",
+        description="How long do you want them muted?",
+        required=True
+    ), 
+
+    member: nextcord.Member = nextcord.SlashOption(
+        name="member",
+        description="Who is the member?",
+        required=True
+    ), 
+
+    reason: str = nextcord.SlashOption(
+        name="reason",
+        description="What is the reason?",
+        required=False
+    )
+):
+    async with interaction.channel.typing():
+        if not (interaction.user.guild_permissions.moderate_members):
+            await interaction.response.send_message("You can't use this as you don't have `timeout members`.", ephemeral=True)
+            pass
+
+        else:
+
+            if member == interaction.user:
+                await interaction.send("You can\'t mute yourself!")
+                return
+
+            duration = humanfriendly.parse_timespan(time)
+            await member.edit(timeout=nextcord.utils.utcnow() + datetime.timedelta(seconds=duration), reason=reason)
+            embed = nextcord.Embed(
+                title=f"Muted {member.name}!",
+                description=f"Information about the muted user. ID: {member.id}",
+                color=0xe40707
+            )
+            embed.add_field(
+                name="**Muted by:**", 
+                value=f"Username: {interaction.user.mention} ID: {interaction.user.id}",inline=False
+            )
+            embed.add_field(
+                name="**Muted from**", 
+                value=f"{interaction.guild}", 
+                inline=False
+            )
+            embed.add_field(
+                name="**Muted for:**", 
+                value=f"{reason}", 
+                inline=False
+            )
+            embed.add_field(
+                name="**Time:**", 
+                value=f"{time}", 
+                inline=False
+            )
+
+            await interaction.send(embed=embed)
+            embed = nextcord.Embed(
+                title=f"You were muted!",
+                description=f"Information about you. ID: {member.id}",
+                color=0xe40707
+            )
+            embed.add_field(
+                name="**Muted by:**", 
+                value=f"Username: {interaction.user.mention} ID: {interaction.user.id}",inline=False
+            )
+            embed.add_field(
+                name="**Muted from**", 
+                value=f"{interaction.guild}", 
+                inline=False
+            )
+            embed.add_field(
+                name="**Muted for:**", 
+                value=f"{reason}", 
+                inline=False
+            )
+            embed.add_field(
+                name="**Time:**", 
+                value=f"{time}", 
+                inline=False
+            )
+            await member.send(embed=embed)
+
+@client.slash_command(name="unmute", description="Unmute members!")
+async def unmute(
+    interaction: Interaction, 
+    member: nextcord.Member = nextcord.SlashOption(
+        name="member",
+        description="Who do you want to unmute?",
+        required=True
+    ),
+
+    reason = nextcord.SlashOption(
+        name="reason",
+        description="What is the reason?",
+        required=False
+    )
+):
+    async with interaction.channel.typing():
+        if not (interaction.user.guild_permissions.moderate_members):
+            await interaction.response.send_message("You can't use this as you don't have `timeout members`.", ephemeral=True)
+            pass
+
+        else:
+
+            await member.edit(timeout=None, reason=reason)
+            embed = nextcord.Embed(
+                title=f"Unmuted {member.name}!", 
+                color=0xe40707
+            )
+            await interaction.send(embed=embed)
+            embed2 = nextcord.Embed(
+                title=f"You were Unmuted!", 
+                color=0xe40707
+            )
+            await member.send(embed=embed2)
+
+@client.slash_command(name="warn", description="Warn someone!")
+async def warn(interaction: Interaction, member: nextcord.Member = nextcord.SlashOption(description="Who is the person?"), *, reason=nextcord.SlashOption(description="What is the reason?")):
+    async with interaction.channel.typing():
+        if not (interaction.user.guild_permissions.moderate_members):
+            await interaction.send("You don't have permissions for `timeout members`")
+            pass
+
+        else:
+            embed2 = nextcord.Embed(
+                title=f"Warned {member.name}",
+                description="Information about the Warned user.",
+                color=0xe40707
+            )
+            embed2.add_field(
+                name="**Warned by:**",
+                value=f"{interaction.user.mention}",
+                inline=False
+            )
+            embed2.add_field(
+                name="**Warned from**",
+                value=f"{interaction.guild}",
+                inline=False
+            )
+
+            embed2.add_field(
+                name="**Warned for:**",
+                value=f"{reason}",
+                inline=False
+            )
+            await interaction.send(embed=embed2)
+
+            embed3 = nextcord.Embed(
+                title=f"Warned {member.name}!",       
+                color=0xe40707
+            )
+            embed3.add_field(
+                name="**Warned by:**",
+                value=f"{interaction.user.mention}",
+                inline=False
+            )
+            embed3.add_field(
+                name="**Warned from**",
+                value=f"{interaction.guild}",
+                inline=False
+            )
+            embed3.add_field(
+                name="**Warned for:**",
+                value=f"{reason}",
+                inline=False
+            )
+            await member.send(embed=embed3)
+
+for filename in os.listdir("./cogs"):
+    if filename.endswith(".py"):
+        client.load_extension(f"cogs.{filename[:-3]}")
+
+client.run("OTQzNjczNzU0NjgzMzEwMDkw.Yg2eqw.5Rbh_MBiq8FgPLCEwY53SOY4ciE")":
         if mode in s:
             await interaction.send(f"My choice was scissors aswell, So It was a tie!")
         if mode in p:
