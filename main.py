@@ -126,120 +126,6 @@ async def greentext(
         )
         return
 
-@client.slash_command(description="Talk with the bot!")
-async def talk(interaction):
-    async with interaction.channel.typing():
-        if (interaction.user.voice):
-            vc = interaction.user.voice.channel
-            vca = await vc.connect()
-            talking = True
-            await interaction.send("You are now talking to me, to end this interaction type: goodbye famurai!")
-
-            while talking:
-
-                try:
-                    def check(m):
-                        return m.author == interaction.user
-
-                    msg_raw = await client.wait_for("message", check=check, timeout=60.0)
-                    msg = msg_raw.content
-                except asyncio.TimeoutError:
-                    talking = False
-                    await interaction.send("You timed out, rerun the command.")
-
-                raw_response = await bot.get_ai_response(
-                    msg, 
-                    bot_name="Famu but people call me Famurai", 
-                    bot_master="FlameyosFlow", 
-                    bot_location="Qatar", 
-                    bot_favorite_color="Black", 
-                    bot_birth_place="Egypt", 
-                    bot_company="Fire Samurai inc.",
-                    bot_build='Public',
-                    bot_email='...I have no email.',
-                    bot_age='1',
-                    bot_birth_date='18th December, 2021',
-                    bot_birth_year='2021',
-                    bot_favorite_book='Harry Potter',
-                    bot_favorite_band='Balenciaga',
-                    bot_favorite_artist='Eminem',
-                    bot_favorite_actress='Selena Gomez',
-                    bot_favorite_actor='Tom Holland',
-                )
-
-                response = raw_response.AIResponse
-                output = gtts.gTTS(text=response, lang="en", slow=False)
-                output.save("output.mp3")
-
-                if msg == "goodbye famurai":
-                    talking = False
-                    await interaction.send("Okay, I will stop talking to you, nice seeing you {}".format(interaction.user.mention))
-                    await interaction.guild.voice_client.disconnect()
-
-                else:
-                    vca.play(nextcord.FFmpegPCMAudio("output.mp3"))
-
-                    await interaction.send(response)
-
-        else:
-            await interaction.send("You're not in a voice channel, do you want to continue without voice? respond in `yes` or `no`")
-            try:
-                def check(m):
-                    return m.author == interaction.user
-                    
-                raw_msg = await client.wait_for("message", check=check, timeout=60.0)
-                msg = raw_msg.content
-            except asyncio.TimeoutError:
-                await interaction.send("You timed out, rerun the command.")
-                pass
-
-            if msg == "yes":
-                talking = True
-                await interaction.send("You are now talking to me, to end this interaction: type goodbye famurai!")
-
-                while talking:
-
-                    try:
-                        def check(m):
-                            return m.author == interaction.user and m.channel == interaction.channel
-
-                        msg_raw = await client.wait_for("message", check=check, timeout=60.0)
-                        msg = msg_raw.content
-                    except asyncio.TimeoutError:
-                        await interaction.send("You timed out, rerun the command.")
-                        pass
-
-                    if msg == "goodbye famurai":
-                        talking = False
-                        await interaction.send("Okay, I will stop talking to you, nice seeing you {}".format(interaction.user.mention))
-
-                    else:
-                        raw_response = await bot.get_ai_response(
-                            msg, 
-                            bot_name="Famu but people call me Famurai", 
-                            bot_master="FlameyosFlow", 
-                            bot_location="Qatar", 
-                            bot_favorite_color="Black", 
-                            bot_birth_place="Egypt", 
-                            bot_company="Fire Samurai inc.",
-                            bot_build='Public',
-                            bot_email='...I have no email.',
-                            bot_age='1',
-                            bot_birth_date='18th December, 2021',
-                            bot_birth_year='2021',
-                            bot_favorite_book='Harry Potter',
-                            bot_favorite_band='Balenciaga',
-                            bot_favorite_artist='Eminem',
-                            bot_favorite_actress='Selena Gomez',
-                            bot_favorite_actor='Tom Holland',
-                        )
-                        response = raw_response.AIResponse
-
-                        await interaction.send(response)
-
-            elif msg == "no":
-                await interaction.response.send_message("Okay, I guess I will take that as a no.")
-
 @client.slash_command(description="Set a reminder!")
 async def remindme(
     interaction: Interaction, 
@@ -255,72 +141,17 @@ async def remindme(
         required=True
     ),
 ):
-    async with interaction.channel.typing():
-        duration = humanfriendly.parse_timespan(time)
-        await interaction.send(
-            f"Set reminder for {interaction.user.mention} \n{message} \n||Set for {time}||"
-        )
-
-        await asyncio.sleep(duration)
-
-        await interaction.channel.send(
-            f"Reminder for {interaction.user.mention} \n{message}"
-        )
-
-@client.slash_command(description="Stop chatting with Famurai")
-async def leave(interaction):
-    async with interaction.channel.typing():
-        talking = False
-        if (interaction.user.voice):
-            await interaction.guild.voice_client.disconnect()
-            await interaction.send("I have left your voice channel!")
-
-        else:
-            await interaction.send("Okay, Thanks for talking with me :D")
-
-@client.slash_command(description="Create a giveaway with this command!")
-async def gstart(
-    inter: Interaction, 
-    duration = nextcord.SlashOption(
-        name="time",
-        description="How long should it last? ex: 7d or 12h",
-        required=True
-    ), 
-    prize = nextcord.SlashOption(
-        name="prize",
-        description="What is the prize?",
-        required=True
-    )
-):
-    if not (inter.user.guild_permissions.manage_guild):
-        await inter.send("You need `manage_guild` permissions")
-        pass
-
-    else:
-        dur = humanfriendly.parse_timespan(duration)
-
-        end = datetime.datetime.utcnow() + datetime.timedelta(seconds=dur)
-
-        giveaway = nextcord.Embed(
-            title="Made by {}".format(inter.user),
-            description="Prize: {} \nTime: {}".format(prize, duration),
-            color = nextcord.Color.green(),
-            timestamp=datetime.datetime.utcnow()
-        )
-        giveaway.set_author(name=inter.user.name, icon_url=inter.user.avatar.url)
-        giveaway.set_footer(text=f"Ends in {end} UTC")
-        await inter.send(embed=giveaway)
-
-        await (await inter.original_message()).add_reaction("🎉")
-        await asyncio.sleep(dur)
-        old_msg = await inter.original_message()
-
-        new_msg = await inter.channel.fetch_message(old_msg.id)
-        users = await new_msg.reactions[0].users().flatten()
-        users.pop(users.index(client.user))
-
-        winner = random.choice(users)
-        await inter.send(f"Congratulations {winner.mention}, you just won the prize of {prize}")
+    
+	duration = humanfriendly.parse_timespan(time)
+	await interaction.send(
+	    f"Set reminder for {interaction.user.mention} \n{message} \n||Set for {time}||"
+	)
+	
+	await asyncio.sleep(duration)
+	
+	await interaction.channel.send(
+	    f"Reminder for {interaction.user.mention} \n{message}"
+	)
 
 @client.slash_command(description="Random birbs from the internet!")
 async def birbs(interaction):
